@@ -1,23 +1,17 @@
-scripts:
+workflows:
+  android-build:
+    name: Android Build
+    max_build_duration: 60
+    instance_type: linux_x2
 
-    # ....
+    environment:
+      java: 17
 
-  - name: Set Android SDK location
+    scripts:
+      - name: Build Android APK
+        script: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
 
-    script: | 
-
-      echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
-
-  - name: Build Android release
-
-    script: | 
-
-      ./gradlew bundleRelease # -> to create the .aab
-
-      # gradlew assembleRelease # -> to create the .apk
-
-
-
-artifacts:
-
-  - app/build/outputs/**/*.aab
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
