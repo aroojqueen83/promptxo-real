@@ -1,35 +1,79 @@
-scripts:
+workflows:
 
-    # ....
+  native-android:
 
-  - name: Build Android release
+    name: Native Android
 
-    script: | 
+    max_build_duration: 120
 
-      LATEST_GOOGLE_PLAY_BUILD_NUMBER=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME")
+    instance_type: mac_mini_m2
 
-      if [ -z $LATEST_GOOGLE_PLAY_BUILD_NUMBER ]; then
+    environment:
 
-        # fallback in case no build number was found from Google Play.
+      android_signing:
 
-        # Alternatively, you can `exit 1` to fail the build
+        - keystore_reference
 
-        # BUILD_NUMBER is a Codemagic built-in variable tracking the number
+      groups:
 
-        # of times this workflow has been built
+        - google_play
 
-          UPDATED_BUILD_NUMBER=$BUILD_NUMBER
+      vars:
 
-      else
+        PACKAGE_NAME: "io.codemagic.sample.androidnative"
 
-          UPDATED_BUILD_NUMBER=$(($LATEST_GOOGLE_PLAY_BUILD_NUMBER + 1))
+    scripts:
 
-      fi
+      - name: Set Android SDK location
 
-      cd android
+        script: | 
 
-      ./gradlew bundleRelease \
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
 
-          -PversionCode=$UPDATED_BUILD_NUMBER \
+      - name: Build Android release
 
-          -PversionName=1.0.$UPDATED_BUILD_NUMBER
+        script: | 
+
+          LATEST_GOOGLE_PLAY_BUILD_NUMBER=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME")
+
+          if [ -z $LATEST_GOOGLE_PLAY_BUILD_NUMBER ]; then
+
+              # fallback in case no build number was found from google play. Alternatively, you can `exit 1` to fail the build
+
+              UPDATED_BUILD_NUMBER=$BUILD_NUMBER
+
+          else
+
+              UPDATED_BUILD_NUMBER=$(($LATEST_GOOGLE_PLAY_BUILD_NUMBER + 1))
+
+          fi
+
+          ./gradlew bundleRelease -PversionCode=$UPDATED_BUILD_NUMBER -PversionName=1.0.$UPDATED_BUILD_NUMBER
+
+    artifacts:
+
+      - app/build/outputs/**/*.aab
+
+    publishing:
+
+      email:
+
+        recipients:
+
+          - user_1@example.com
+
+          - user_2@example.com
+
+        notify:
+
+          success: true
+
+          failure: false
+
+      google_play:
+
+        credentials: $GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS
+
+        track: internal
+
+        submit_as_draft: true
