@@ -11,12 +11,11 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class FirebaseRepository {
-
     private val firestore: FirebaseFirestore by lazy {
         FirebaseFirestore.getInstance()
     }
 
-    // Default sample posts
+    // Default sample posts matching user's exact design and screenshots
     val defaultHomePosts = listOf(
         PostItem(
             id = "post_1",
@@ -150,7 +149,7 @@ class FirebaseRepository {
         )
     )
 
-    // Default image posts
+    // Default sample image posts matching user's exact screenshots (vintage 1980s portrait style)
     val defaultImagePosts = listOf(
         ImagePostItem(
             id = "img_1",
@@ -286,61 +285,28 @@ class FirebaseRepository {
         )
     )
 
-    private fun extractTimestamp(
-        doc: com.google.firebase.firestore.DocumentSnapshot
-    ): Long {
+    private fun extractTimestamp(doc: com.google.firebase.firestore.DocumentSnapshot): Long {
         val candidateFieldNames = listOf(
-            "createAs",
-            "create as",
-            "create_as",
-            "createas",
-            "createdAt",
-            "created_at",
-            "createAt",
-            "create_at",
-            "timestamp",
-            "time",
-            "date",
-            "created",
-            "datetime"
+            "createAs", "create as", "create_as", "createas",
+            "createdAt", "created_at", "createAt", "create_at",
+            "timestamp", "time", "date", "created", "datetime"
         )
-
         for (field in candidateFieldNames) {
             if (doc.contains(field)) {
                 val value = doc.get(field) ?: continue
-
                 when (value) {
-
-                    is com.google.firebase.Timestamp -> {
-                        return value.toDate().time
-                    }
-
-                    is java.util.Date -> {
-                        return value.time
-                    }
-
+                    is com.google.firebase.Timestamp -> return value.toDate().time
+                    is java.util.Date -> return value.time
                     is Number -> {
                         val num = value.toLong()
-                        return if (num in 1..9999999999L) {
-                            num * 1000L
-                        } else {
-                            num
-                        }
+                        return if (num in 1..9999999999L) num * 1000L else num
                     }
-
                     is String -> {
                         val str = value.trim()
-
                         val num = str.toLongOrNull()
-
                         if (num != null) {
-                            return if (num in 1..9999999999L) {
-                                num * 1000L
-                            } else {
-                                num
-                            }
+                            return if (num in 1..9999999999L) num * 1000L else num
                         }
-
                         val formats = listOf(
                             "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
                             "yyyy-MM-dd'T'HH:mm:ss'Z'",
@@ -351,406 +317,176 @@ class FirebaseRepository {
                             "dd-MM-yyyy HH:mm:ss",
                             "MM/dd/yyyy HH:mm:ss"
                         )
-
                         for (fmt in formats) {
                             try {
-                                val sdf = java.text.SimpleDateFormat(
-                                    fmt,
-                                    java.util.Locale.US
-                                )
-
-                                sdf.timeZone =
-                                    java.util.TimeZone.getTimeZone("UTC")
-
+                                val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.US)
+                                sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
                                 val parsed = sdf.parse(str)
-
-                                if (parsed != null) {
-                                    return parsed.time
-                                }
-
-                            } catch (_: Exception) {
-                                // Ignore invalid date formats
-                            }
+                                if (parsed != null) return parsed.time
+                            } catch (_: Exception) { }
                         }
                     }
                 }
             }
         }
-
         return 0L
     }
 
-    /**
-     * Firebase Firestore -> Home Posts
-     *
-     * Collection:
-     * Post
-     */
     fun getHomePostsFlow(): Flow<List<PostItem>> = callbackFlow {
-
         try {
-
-            val listener = firestore
-                .collection("Post")
+            val listener = firestore.collection("Post")
                 .addSnapshotListener { snapshot, error ->
-
-                    // IMPORTANT:
-                    // Firebase error ko hide nahi karenge.
                     if (error != null) {
-
                         Log.e(
                             "FirebaseRepo",
                             "FIRESTORE Post LISTENER ERROR: code=${error.code}, message=${error.message}",
                             error
                         )
-
-                        // App ko usable rakhne ke liye fallback posts.
-                        trySend(
-                            defaultHomePosts
-                                .sortedByDescending { it.createdAt }
-                        )
-
+                        // Do NOT show local/default posts when Firebase fails.
+                        // This makes sure the screen only shows real Firebase data.
+                        trySend(emptyList())
                         return@addSnapshotListener
                     }
-
                     if (snapshot != null && !snapshot.isEmpty) {
-
-                        val posts = snapshot.documents
-                            .mapNotNull { doc ->
-
-                                try {
-
-                                    PostItem(
-                                        id = doc.id,
-
-                                        thumbnail =
-                                            doc.getString("thumbnail")
-                                                ?: "",
-
-                                        title =
-                                            doc.getString("title")
-                                                ?: "",
-
-                                        description =
-                                            doc.getString("description")
-                                                ?: "",
-
-                                        category =
-                                            doc.getString("category")
-                                                ?: "All",
-
-                                        homeCategory =
-                                            doc.getString("homeCategory")
-                                                ?: doc.getString("category")
-                                                ?: "All",
-
-                                        stepsNumbers =
-                                            doc.getString("StepsNumbers")
-                                                ?: doc.getString("stepsNumbers")
-                                                ?: "1 Step",
-
-                                        step1title =
-                                            doc.getString("step1title")
-                                                ?: "Step 1 Title: Generate Video Prompt",
-
-                                        step1description =
-                                            doc.getString("step1description")
-                                                ?: "Click \"Generate Button\" to create a video prompt",
-
-                                        step1prompt =
-                                            doc.getString("step1prompt")
-                                                ?: "",
-
-                                        step1toollink =
-                                            doc.getString("step1toollink")
-                                                ?: "https://flow.ai",
-
-                                        step1toolname =
-                                            doc.getString("step1toolname")
-                                                ?: "Try in Flow",
-
-                                        step2title =
-                                            doc.getString("step2title")
-                                                ?: "",
-
-                                        step2description =
-                                            doc.getString("step2description")
-                                                ?: "",
-
-                                        step2prompt =
-                                            doc.getString("step2prompt")
-                                                ?: "",
-
-                                        step2toollink =
-                                            doc.getString("step2toollink")
-                                                ?: "",
-
-                                        step2toolname =
-                                            doc.getString("step2toolname")
-                                                ?: "",
-
-                                        has2bean =
-                                            doc.getBoolean("has2bean")
-                                                ?: false,
-
-                                        createdAt =
-                                            extractTimestamp(doc)
-                                    )
-
-                                } catch (e: Exception) {
-
-                                    Log.e(
-                                        "FirebaseRepo",
-                                        "ERROR parsing Post document ${doc.id}: ${e.message}",
-                                        e
-                                    )
-
-                                    null
-                                }
+                        val posts = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                PostItem(
+                                    id = doc.id,
+                                    thumbnail = doc.getString("thumbnail") ?: "",
+                                    title = doc.getString("title") ?: "",
+                                    description = doc.getString("description") ?: "",
+                                    category = doc.getString("category") ?: "All",
+                                    homeCategory = doc.getString("homeCategory") ?: doc.getString("category") ?: "All",
+                                    stepsNumbers = doc.getString("StepsNumbers") ?: doc.getString("stepsNumbers") ?: "1 Step",
+                                    step1title = doc.getString("step1title") ?: "Step 1 Title: Generate Video Prompt",
+                                    step1description = doc.getString("step1description") ?: "Click \"Generate Button\" to create a video prompt",
+                                    step1prompt = doc.getString("step1prompt") ?: "",
+                                    step1toollink = doc.getString("step1toollink") ?: "https://flow.ai",
+                                    step1toolname = doc.getString("step1toolname") ?: "Try in Flow",
+                                    step2title = doc.getString("step2title") ?: "",
+                                    step2description = doc.getString("step2description") ?: "",
+                                    step2prompt = doc.getString("step2prompt") ?: "",
+                                    step2toollink = doc.getString("step2toollink") ?: "",
+                                    step2toolname = doc.getString("step2toolname") ?: "",
+                                    has2bean = doc.getBoolean("has2bean") ?: false,
+                                    createdAt = extractTimestamp(doc)
+                                )
+                            } catch (e: Exception) {
+                                Log.e(
+                                    "FirebaseRepo",
+                                    "ERROR parsing Post document ${doc.id}: ${e.message}",
+                                    e
+                                )
+                                null
                             }
-                            .sortedByDescending { it.createdAt }
+                        }.sortedByDescending { it.createdAt }
 
-                        if (posts.isNotEmpty()) {
-
+                        Log.d(
+                            "FirebaseRepo",
+                            "FIREBASE Post SNAPSHOT: documents=${snapshot.documents.size}, parsed=${posts.size}"
+                        )
+                        snapshot.documents.forEach { doc ->
                             Log.d(
                                 "FirebaseRepo",
-                                "Firebase Post collection loaded successfully. Count=${posts.size}"
-                            )
-
-                            trySend(posts)
-
-                        } else {
-
-                            Log.w(
-                                "FirebaseRepo",
-                                "Post collection exists but no valid posts were parsed."
-                            )
-
-                            trySend(
-                                defaultHomePosts
-                                    .sortedByDescending { it.createdAt }
+                                "FIREBASE Post: id=${doc.id}, title=${doc.getString("title")}"
                             )
                         }
 
+                        // Show exactly what came from Firebase.
+                        trySend(posts)
                     } else {
-
-                        Log.w(
-                            "FirebaseRepo",
-                            "Post collection is empty or snapshot is null."
-                        )
-
-                        trySend(
-                            defaultHomePosts
-                                .sortedByDescending { it.createdAt }
-                        )
+                        Log.w("FirebaseRepo", "Firebase Post collection is empty.")
+                        trySend(emptyList())
                     }
                 }
-
-            awaitClose {
-                listener.remove()
-            }
-
+            awaitClose { listener.remove() }
         } catch (e: Exception) {
-
-            Log.e(
-                "FirebaseRepo",
-                "FIRESTORE Post INIT ERROR: ${e.message}",
-                e
-            )
-
-            trySend(
-                defaultHomePosts
-                    .sortedByDescending { it.createdAt }
-            )
-
+            Log.e("FirebaseRepo", "FIRESTORE Post INIT ERROR: ${e.message}", e)
+            trySend(emptyList())
             awaitClose { }
         }
     }
 
-    /**
-     * Firebase Firestore -> Image Posts
-     *
-     * Collection:
-     * imagepost
-     */
     fun getImagePostsFlow(): Flow<List<ImagePostItem>> = callbackFlow {
-
         try {
-
-            val listener = firestore
-                .collection("imagepost")
+            val listener = firestore.collection("imagepost")
                 .addSnapshotListener { snapshot, error ->
-
                     if (error != null) {
-
                         Log.e(
                             "FirebaseRepo",
                             "FIRESTORE imagepost LISTENER ERROR: code=${error.code}, message=${error.message}",
                             error
                         )
-
-                        trySend(
-                            defaultImagePosts
-                                .sortedByDescending { it.createdAt }
-                        )
-
+                        // Do NOT show local/default images when Firebase fails.
+                        trySend(emptyList())
                         return@addSnapshotListener
                     }
-
                     if (snapshot != null && !snapshot.isEmpty) {
-
-                        val images = snapshot.documents
-                            .mapNotNull { doc ->
-
-                                try {
-
-                                    ImagePostItem(
-                                        id = doc.id,
-
-                                        imagetitle =
-                                            doc.getString("imagetitle")
-                                                ?: "",
-
-                                        imageprompt =
-                                            doc.getString("imageprompt")
-                                                ?: "",
-
-                                        imagetoollink =
-                                            doc.getString("imagetoollink")
-                                                ?: "https://chatgpt.com",
-
-                                        imagetoolname =
-                                            doc.getString("imagetoolname")
-                                                ?: "Try in ChatGPT",
-
-                                        thumbnail =
-                                            doc.getString("thumbnail")
-                                                ?: "",
-
-                                        categoryforall =
-                                            doc.getString("categoryforall")
-                                                ?: "All",
-
-                                        categoryfornew =
-                                            doc.getString("categoryfornew")
-                                                ?: "",
-
-                                        categoryfortrending =
-                                            doc.getString("categoryfortrending")
-                                                ?: "",
-
-                                        createdAt =
-                                            extractTimestamp(doc)
-                                    )
-
-                                } catch (e: Exception) {
-
-                                    Log.e(
-                                        "FirebaseRepo",
-                                        "ERROR parsing imagepost document ${doc.id}: ${e.message}",
-                                        e
-                                    )
-
-                                    null
-                                }
+                        val images = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                ImagePostItem(
+                                    id = doc.id,
+                                    imagetitle = doc.getString("imagetitle") ?: "",
+                                    imageprompt = doc.getString("imageprompt") ?: "",
+                                    imagetoollink = doc.getString("imagetoollink") ?: "https://chatgpt.com",
+                                    imagetoolname = doc.getString("imagetoolname") ?: "Try in ChatGPT",
+                                    thumbnail = doc.getString("thumbnail") ?: "",
+                                    categoryforall = doc.getString("categoryforall") ?: "All",
+                                    categoryfornew = doc.getString("categoryfornew") ?: "",
+                                    categoryfortrending = doc.getString("categoryfortrending") ?: "",
+                                    createdAt = extractTimestamp(doc)
+                                )
+                            } catch (e: Exception) {
+                                Log.e(
+                                    "FirebaseRepo",
+                                    "ERROR parsing imagepost document ${doc.id}: ${e.message}",
+                                    e
+                                )
+                                null
                             }
-                            .sortedByDescending { it.createdAt }
+                        }.sortedByDescending { it.createdAt }
 
-                        if (images.isNotEmpty()) {
-
+                        Log.d(
+                            "FirebaseRepo",
+                            "FIREBASE imagepost SNAPSHOT: documents=${snapshot.documents.size}, parsed=${images.size}"
+                        )
+                        snapshot.documents.forEach { doc ->
                             Log.d(
                                 "FirebaseRepo",
-                                "Firebase imagepost collection loaded successfully. Count=${images.size}"
-                            )
-
-                            trySend(images)
-
-                        } else {
-
-                            trySend(
-                                defaultImagePosts
-                                    .sortedByDescending { it.createdAt }
+                                "FIREBASE imagepost: id=${doc.id}, title=${doc.getString("imagetitle")}"
                             )
                         }
 
+                        // Show exactly what came from Firebase.
+                        trySend(images)
                     } else {
-
-                        trySend(
-                            defaultImagePosts
-                                .sortedByDescending { it.createdAt }
-                        )
+                        Log.w("FirebaseRepo", "Firebase imagepost collection is empty.")
+                        trySend(emptyList())
                     }
                 }
-
-            awaitClose {
-                listener.remove()
-            }
-
+            awaitClose { listener.remove() }
         } catch (e: Exception) {
-
-            Log.e(
-                "FirebaseRepo",
-                "FIRESTORE imagepost INIT ERROR: ${e.message}",
-                e
-            )
-
-            trySend(
-                defaultImagePosts
-                    .sortedByDescending { it.createdAt }
-            )
-
+            Log.e("FirebaseRepo", "FIRESTORE imagepost INIT ERROR: ${e.message}", e)
+            trySend(emptyList())
             awaitClose { }
         }
     }
 
-    /**
-     * Firebase Firestore -> App Policies
-     *
-     * Collection:
-     * apppolices
-     */
     suspend fun getAppPolicies(): AppPolicies {
-
         return try {
-
-            val doc = firestore
-                .collection("apppolices")
-                .limit(1)
-                .get()
-                .await()
-
+            val doc = firestore.collection("apppolices").limit(1).get().await()
             if (!doc.isEmpty) {
-
                 val data = doc.documents[0]
-
                 AppPolicies(
-
-                    whatsappchannel =
-                        data.getString("whatsappchannel")
-                            ?: "https://whatsapp.com/channel/promptxo",
-
-                    rateus =
-                        data.getString("rateus")
-                            ?: "market://details?id=com.arslanaziz.promptxo",
-
-                    privatepolicies =
-                        data.getString("privatepolicies")
-                            ?: "https://policies.google.com/privacy"
+                    whatsappchannel = data.getString("whatsappchannel") ?: "https://whatsapp.com/channel/promptxo",
+                    rateus = data.getString("rateus") ?: "market://details?id=com.arslanaziz.promptxo",
+                    privatepolicies = data.getString("privatepolicies") ?: "https://policies.google.com/privacy"
                 )
-
             } else {
-
                 AppPolicies()
             }
-
         } catch (e: Exception) {
-
-            Log.e(
-                "FirebaseRepo",
-                "FIRESTORE apppolices ERROR: ${e.message}",
-                e
-            )
-
+            Log.w("FirebaseRepo", "Could not fetch app policies, using defaults", e)
             AppPolicies()
         }
     }
