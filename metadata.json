@@ -1,0 +1,6 @@
+{
+  "name": "PromptXo",
+  "description": "Discover, generate, and copy AI prompts for videos and images with categorized feeds, favorites, and step-by-step tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
